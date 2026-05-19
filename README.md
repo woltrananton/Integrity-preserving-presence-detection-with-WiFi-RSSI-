@@ -1,6 +1,6 @@
 # IoT-närvarodetektering med WiFi RSSI
 
-Projekt i kursen *IoT och molntjänster* (A331TG), VT2026 — Grupp 12.
+Projekt i kursen *IoT och molntjänster* (A331TG), VT2026 — Grupp 11.
 
 Systemet detekterar om en labbsal är **tom eller bemannad** genom att
 analysera hur människokroppar dämpar WiFi-signalen mellan en router och ett
