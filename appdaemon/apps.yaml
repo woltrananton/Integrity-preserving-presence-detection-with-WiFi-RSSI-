@@ -1,0 +1,213 @@
+# =====================================================================
+# AppDaemon-konfiguration för RSSI-loggern (router-baserad).
+#
+# Loggern SSH:ar mot Asus-routern och läser MAC-tabellen där alla
+# anslutna WiFi-klienters RSSI finns. Vi får därmed en enhetlig
+# mottagare oavsett enhetsmärke (Shelly, Tuya, m.fl.).
+#
+# Lägg in den här filen tillsammans med rssi_logger.py + secrets.yaml
+# i AppDaemon:s apps-mapp på Pi:n. AppDaemon laddar om automatiskt
+# vid filändring.
+# =====================================================================
+
+rssi_logger:
+  module: rssi_logger
+  class: RssiLogger
+
+  # --- Routern (mätstation) ---
+  # Asus RT-AC51U+/AC52U_B1 med MediaTek-chipset. SSH måste vara påslaget
+  # i routerns admin-UI: Administration → System → Enable SSH = LAN only.
+  router:
+    host: 192.168.1.1
+    user: admin
+    port: 22
+    # Lösenordet ligger i secrets.yaml (samma mapp som denna fil).
+    password_secret: router_password
+    # ALTERNATIV (inte rekommenderat — endast för snabb-test):
+    # password: skriv-i-klartext-har
+
+  # --- Sampling ---
+  sample_interval: 10        # sekunder mellan varje routerpoll
+
+  # --- Märkning ---
+  # 'auto' = använd kamerans motion-state som label (rekommenderas)
+  # 'empty' / 'occupied' = tvinga alla rader till värdet (manuell session)
+  # 'unknown' = ingen label
+  label_mode: auto
+  session_id: ""
+
+  # --- Kamera ground truth ---
+  motion_entity: binary_sensor.iot12_reolink_motion
+
+  # --- Heartbeat ---
+  # Skapas automatiskt i HA första gången set_state körs.
+  heartbeat_entity: sensor.rssi_logger_heartbeat
+
+  # --- Datakatalog ---
+  # /share/data exponeras automatiskt via Samba-tillägget.
+  data_dir: /share/data
+
+  # --- Anchors ---
+  # Varje anchor matchas mot routerns MAC-tabell på 'mac'. 'ip' används
+  # för att pinga enheten varje sampling så routerns RSSI-värde hålls
+  # färskt (annars kan Idle-tiden bli flera minuter).
+  #
+  # Hitta MAC + IP i routerns Network Map → Clients, eller via SSH:
+  #   iwpriv ra0 get_mac_table; dmesg | tail -100
+  #   cat /proc/net/arp
+  #
+  # OBS: mac/ip nedan är PLATSHÅLLARE — ersätt med era egna enheter.
+  #
+  # 'name' används som entity_id-kolumn i CSV — välj korta beskrivande
+  # namn (t.ex. fysisk position).
+  # Layout (se data/setup_*/skiss.png):
+  #   KORRIDOR  ▲ (top)
+  #   VÄG       ▼ (bottom)
+  #   Router placerad centralt.
+  # Namnschema: <enhet>_<position>
+  #   k* = korridor (top), v* = väg (bottom), *h = höger, *v = vänster, *m = mitt
+  #   "router" = invid routern (calibration), "bank" = på bänken där vi sitter
+  anchors:
+    - name: shelly_kh                         # Shelly Plus Plug S, korridor-höger hörn
+      mac: AA:BB:CC:00:00:01
+      ip: 192.168.1.101
+
+    - name: cleverio_vm                       # Cleverio Mini Tuya, vänster-mitten
+      mac: AA:BB:CC:00:00:02
+      ip: 192.168.1.102
+
+    - name: shelly_vv                         # Shelly Plus Plug S #2, väg-vänster hörn
+      mac: AA:BB:CC:00:00:03
+      ip: 192.168.1.103
+
+    - name: ht_bank                           # Shelly H&T, på bänken där vi sitter —
+      mac: AA:BB:CC:00:00:04                  # kropp shadower direkt LOS till routern
+      ip: 192.168.1.104
+
+    - name: prokord_vh                        # Prokord Tuya, väg-höger hörn
+      mac: AA:BB:CC:00:00:05
+      ip: 192.168.1.105
+
+    - name: led_router                        # Cleverio LED-slinga, invid routern —
+      mac: AA:BB:CC:00:00:06                  # calibration-anchor (bör vara stabil)
+      ip: 192.168.1.106
+
+# =====================================================================
+# Azure IoT Hub-brygga
+#
+# Ensam Azure-klient i hela systemet. Hanterar två strömmar:
+#   1. occupancy_state — state-changes på lampan (occupancy_entity)
+#   2. narvaroperiod   — period-events från period_logger (HA event bus)
+#
+# Båda taggas med event_type så Stream Analytics / Power BI kan särskilja
+# dem. En klient (inte två) eftersom IoT Hub bara tillåter en aktiv
+# anslutning per device-identitet — vi hade en reconnect-storm 2026-05-12
+# när period_logger körde egen Azure-klient parallellt.
+#
+# Kräver 'azure-iot-device' under python_packages i AppDaemon-addonen.
+# Connection string läggs i secrets.yaml som azure_iot_connection_string.
+# =====================================================================
+
+azure_bridge:
+  module: azure_bridge
+  class: AzureBridge
+  occupancy_entity: light.cleverio_rgb_led_strip_ls200
+  # source_entity borttagen 2026-05-13 — kameran ska aldrig taggas in i
+  # Azure-strömmen. azure_bridge.py hardkodar nu source="wifi".
+  period_event: rummet_period       # HA-event från period_logger
+
+
+# =====================================================================
+# RSSI-inferens (multivariat hybridmodell)
+#
+# Tidigare V1-V7-iterationer (per-anchor IF + weighted_score + R1-R6)
+# avvecklade 2026-05-11 till förmån för denna multivariata arkitektur:
+#   - En multivariat Isolation Forest tränad på 8-dim delta-vektor
+#   - Adaptiv EWMA-baseline (30 min halveringstid)
+#   - Rule-based detektorer A (median-shift), B (multi-anchor std), C (fidget)
+#   - Period-extraktion för Power BI-loggning (separat app period_logger)
+#
+# Validerat 2026-05-11: 100% TPR på 9 annoterade fönster, 17 FP per 3 dygn helg.
+# Modell: Projekt/test/models/if_model.joblib (helgen-only-tränad)
+#
+# Den här AppDaemon-appen:
+#   - Tail:ar CSV som loggern skriver till /share/data/
+#   - Beräknar 8-dim delta-features (4 ankares median + 4 std)
+#   - Anropar ML-server på port 8765 för IF-prediktion
+#   - Kör rule-based detektorer A/B/C + persistens lokalt
+#   - Publicerar binary_sensor.rummet_bemannat_wifi
+#
+# ML-containern (Portainer) kräver scikit-learn — denna AppDaemon-app
+# behöver bara standard Python.
+# =====================================================================
+
+rssi_inference:
+  module: inference_app
+  class: InferenceApp
+
+  # --- Datakällor ---
+  data_dir: /share/data
+  log_dir: /share/data/inference_log
+
+  # --- ML-server (Portainer-container) ---
+  ml_url: http://192.168.1.88:8765
+
+  # --- Sampling ---
+  sample_interval: 10
+
+  # --- IF-persistens (utöver score-tröskel i bundle) ---
+  if_persistence_s: 100         # IF-anomali måste hålla 100s innan trigger
+
+  # --- TriggerLatch (fix 2026-05-11) ---
+  # Håller lampa-on N sekunder efter senaste trigger, även om detektorerna
+  # är glesa. Löser persistens-gap vid stillsittande. Inspirerat av V7:s
+  # LatchTracker men längre (600s vs 90s). Bekräftat fungerande offline
+  # mot 0511 där modellen utan latch missade 14 min i sittsession.
+  latch_s: 600
+
+  # --- Lampa-cooldown (släck efter latch slut + tystnad) ---
+  cooldown_s: 120
+
+  # --- Fix 2026-05-13: nightly baseline + B/C-watchdog ---
+  # baseline_strategy: "nightly" räknar om baseline kl 05:00 från 00-05-buffer
+  # och fryser den under dagen. Löser baseline-drift-feedback där modellens
+  # egen state förgiftade EWMA-baselinen. "ewma" = gamla beteendet.
+  baseline_strategy: nightly
+
+  # bc_watchdog_s: max tid lampan får vara ON utan att B eller C fyrat.
+  # D ensam räcker inte (möbel-skift triggar D). Watchdog tvingar release
+  # efter denna tid och D får inte återtända ensam (kräver rörelse-bevis
+  # = B eller C). Sätt 0 för att stänga av.
+  bc_watchdog_s: 7200           # 2 timmar
+
+  # --- MQTT-publicering (för logger/debug) ---
+  mqtt_topic: rummet/narvaro/state
+
+
+# =====================================================================
+# Närvaroperiod-loggning (för Power BI / rumsutnyttjandeanalys)
+#
+# Lyssnar på binary_sensor.rummet_bemannat_wifi (modellens output),
+# konverterar state-changes till (start, slut, varaktighet)-perioder,
+# filtrerar bort kortare än 5 min, publicerar till:
+#   - MQTT (för HA-konsumtion och debug)
+#   - HA event bus som 'rummet_period' (azure_bridge plockar upp och
+#     forwardar till IoT Hub som event_type=narvaroperiod)
+#
+# Ingen egen Azure-klient — se kommentaren i azure_bridge-blocket.
+# =====================================================================
+
+period_logger:
+  module: period_logger
+  class: PeriodLogger
+  watch_entity: binary_sensor.rummet_bemannat_wifi
+  min_period_min: 5             # filtrera bort perioder < 5 min (FP-skydd)
+  mqtt_topic: rummet/narvaro/period
+  azure_event: rummet_period    # HA-event som azure_bridge lyssnar på
+  heartbeat_entity: sensor.period_logger_heartbeat
+
+  # --- Fix 2026-05-17: periodslut på detektor-span ---
+  # Perioden mäts till sista detektor-aktivitet (A/B/C/D) + denna marginal,
+  # inte till när lampan släcks. Tar bort latch+cooldown-svansen (~12 min)
+  # som annars blåser upp varje Azure-period. 0 = rent detektor-span.
+  detector_grace_s: 120

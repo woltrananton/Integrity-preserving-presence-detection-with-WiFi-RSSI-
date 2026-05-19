@@ -1,0 +1,59 @@
+# =====================================================================
+# Home Assistant — Lovelace-dashboard för närvaroprojektet
+# =====================================================================
+# Klistra in via Inställningar → Dashboards → ⋮ → Raw configuration editor.
+#
+# Visar endast entiteter som faktiskt finns i den aktuella uppsättningen
+# (efter modellpivoten 2026-05-13). Kameran visas bara som info — den
+# styr ingenting, den används som ground truth vid validering.
+# =====================================================================
+
+title: Närvaroprojekt
+views:
+  - title: Översikt
+    path: oversikt
+    icon: mdi:home-search
+    cards:
+
+      # --- Rumsstatus ---
+      - type: entities
+        title: Rumsstatus
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.rummet_bemannat_wifi
+            name: Rummet bemannat (WiFi-modell)
+          - entity: light.cleverio_rgb_led_strip_ls200
+            name: Belysning
+          - entity: binary_sensor.iot12_reolink_motion
+            name: Kamera (endast validering)
+
+      # --- Systemhälsa ---
+      - type: entities
+        title: Systemhälsa
+        entities:
+          - entity: sensor.rssi_logger_heartbeat
+            name: RSSI-logger
+          - type: attribute
+            entity: sensor.rssi_logger_heartbeat
+            attribute: samples
+            name: Samples skrivna
+          - type: attribute
+            entity: sensor.rssi_logger_heartbeat
+            attribute: errors
+            name: Fel
+          - type: attribute
+            entity: sensor.rssi_logger_heartbeat
+            attribute: last_update
+            name: Senast uppdaterad
+          - entity: sensor.period_logger_heartbeat
+            name: Period-logger
+
+      # --- Närvarohistorik ---
+      - type: history-graph
+        title: Närvaro senaste dygnet
+        hours_to_show: 24
+        entities:
+          - entity: binary_sensor.rummet_bemannat_wifi
+            name: WiFi-modell
+          - entity: binary_sensor.iot12_reolink_motion
+            name: Kamera

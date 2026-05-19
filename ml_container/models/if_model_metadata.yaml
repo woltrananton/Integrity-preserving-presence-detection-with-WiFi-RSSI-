@@ -1,0 +1,60 @@
+# Metadata för produktions-Isolation-Forest
+# Genererat av train_if_production.py
+
+trained_at: 2026-05-11T10:58:42
+trained_by: train_if_production.py
+strategy: helgen_only
+
+training_strategy:
+  - hela dygnet på lördagar och söndagar (säkert tomt, ingen verksamhet)
+  - vardags-nätter EJ inkluderade (höll TPR uppe på subtila occupied-fönster)
+  - annoterade occupied-fönster exkluderas som säkerhetsskydd
+  - sampler där label==occupied exkluderas också
+
+hyperparameters:
+  contamination: 0.005
+  n_estimators: 200
+  random_state: 42
+  score_threshold: 0.05  # empiriskt tunat - positiv tröskel pga skev score-fördelning
+  persistence_s: 100.0
+  cooldown_s: 120.0
+  power_bi_length_filter_min: 5  # rekommenderat i Power BI
+
+features:
+  dim: 8
+  description: 4 ankares median-delta + 4 ankares std-delta mot adaptiv EWMA-baseline
+  anchors: [led_router, prokord_vh, shelly_vv, cleverio_vm]
+
+n_training_samples: 34428
+
+training_period_breakdown:
+  helg: 34428
+  vardag_natt: 0
+  skipped_excluded: 0
+  skipped_occupied_label: 132
+  skipped_outside_window: 74381
+  skipped_incomplete_features: 5
+
+samples_per_date:
+  2026-05-02 (lör): 8639
+  2026-05-03 (sön): 8638
+  2026-05-09 (lör): 8562
+  2026-05-10 (sön): 8589
+
+excluded_annotated_windows:
+  - 0429_lecture: 2026-04-29 13:00 -> 2026-04-29 17:00
+  - 0430_1p_still: 2026-04-30 11:40 -> 2026-04-30 12:05
+  - 0504_2p: 2026-05-04 12:06 -> 2026-05-04 12:35
+  - 0504_3p_still: 2026-05-04 12:35 -> 2026-05-04 12:55
+  - 0504_5plus_active: 2026-05-04 13:00 -> 2026-05-04 13:50
+  - 0505_1p_still: 2026-05-05 09:14 -> 2026-05-05 09:30
+  - 0505_2p_bilateral: 2026-05-05 09:30 -> 2026-05-05 09:45
+  - 0505_3p_still: 2026-05-05 09:55 -> 2026-05-05 10:35
+
+validation:
+  status: not_yet_run — kör 'python validate_if_model.py' separat
+
+notes: |
+  Modellen tränas på säkert-tomma perioder. När du loggar fler dygn
+  data, kör om scriptet och få en mer robust modell. Heldagar på
+  lördagar/söndagar och vardags-nätter 00-05 läggs automatiskt till.

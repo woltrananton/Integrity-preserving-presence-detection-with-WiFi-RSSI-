@@ -1,0 +1,26 @@
+- id: "tand_led_vid_narvaro"
+  alias: "Tänd LED vid närvaro"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.rummet_bemannat_wifi
+      to: "on"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.cleverio_rgb_led_strip_ls200
+      data:
+        brightness_pct: 80
+  mode: single
+
+- id: "slack_led_efter_franvaro"
+  alias: "Släck LED efter frånvaro"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.rummet_bemannat_wifi
+      to: "off"
+      for: "00:05:00"
+  action:
+    - service: light.turn_off
+      target:
+        entity_id: light.cleverio_rgb_led_strip_ls200
+  mode: single

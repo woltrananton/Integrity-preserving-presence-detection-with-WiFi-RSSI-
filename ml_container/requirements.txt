@@ -1,0 +1,10 @@
+# Python-beroenden för ML-inferenscontainern (ml_server.py).
+# Samma pinnade versioner som i Dockerfile och docker-compose.yml.
+# Installeras automatiskt vid container-start — denna fil finns med
+# för dokumentation och för lokal testkörning (pip install -r).
+
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+scikit-learn==1.5.2
+numpy==2.0.2
+joblib==1.4.2

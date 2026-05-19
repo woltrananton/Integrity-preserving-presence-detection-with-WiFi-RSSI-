@@ -1,0 +1,28 @@
+
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+# =============================================================================
+# Närvaro-arkitektur (förenklat 2026-05-13)
+# =============================================================================
+# Den enda närvaro-sensorn är binary_sensor.rummet_bemannat_wifi, som sätts
+# av AppDaemon-appen scripts/inference_app.py via self.set_state(). Alla
+# automations pekar direkt på den.
+#
+# Den gamla abstraktionen binary_sensor.rummet_bemannat (template eller MQTT)
+# togs bort eftersom kameran är bortkopplad från lampstyrningen och WiFi-
+# modellen är enda källan. Inget skäl att ha två entiteter när det bara finns
+# en källa.
+#
+# Kameran (binary_sensor.iot12_reolink_motion) styr ingenting via HA — den
+# används bara som label-kolumn i RSSI-CSV:n för ground truth under
+# valideringsfasen.
+# =============================================================================
