@@ -219,3 +219,13 @@ All rådata — RSSI-värden och kamerans motion-events — stannar på det loka
 nätet. Endast aggregerade binära närvaroperioder skickas till molnet.
 Kameran används enbart som facit under valideringen och styr ingenting.
 Designen följer GDPR Art. 5 (dataminimering, ändamålsbegränsning).
+
+
+## Authors
+
+- Anton Wolter ([@woltrananton](https://github.com/woltrananton))
+- Elliot Persson ([@PerssonElliot05](https://github.com/PerssonElliot05))
+
+## License
+
+Released under the [MIT License](LICENSE).
